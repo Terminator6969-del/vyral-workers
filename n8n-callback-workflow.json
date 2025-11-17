@@ -1,0 +1,241 @@
+{
+  "name": "Vyral Callback Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vyral-flow-a-callback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "2c50533c-84e1-43c9-9b72-aaccd6bf3915",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2224,
+        -96
+      ],
+      "webhookId": "53be3e32-cca8-48b0-b9b2-2469467cda54"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "workerBaseUrl",
+              "value": "={{ $env.CLOUDFLARE_WORKER_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "vyralWorkerSecret",
+              "value": "={{ $env.VYRAL_WORKER_SECRET }}",
+              "type": "string"
+            },
+            {
+              "id": "id-3",
+              "name": "nextWebhookUrl",
+              "value": "={{ $env.NEXT_WEBHOOK_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "id-4",
+              "name": "supabaseUrl",
+              "value": "={{ $env.SUPABASE_URL }}",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "supabaseKey",
+              "value": "={{ $env.SUPABASE_KEY }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "c855e243-b3f6-4653-b541-189be92b97c3",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -2000,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobId = $input.first().json.jobId;\nconst supabaseUrl = $('Workflow Configuration').item.json.supabaseUrl;\nconst supabaseKey = $('Workflow Configuration').item.json.supabaseKey;\n\nconst response = await fetch(`${supabaseUrl}/rest/v1/jobs?id=eq.${jobId}`, {\n  method: 'PATCH',\n  headers: {\n    'apikey': supabaseKey,\n    'Authorization': `Bearer ${supabaseKey}`,\n    'Content-Type': 'application/json',\n    'Prefer': 'return=representation'\n  },\n  body: JSON.stringify({\n    status: 'running',\n    updated_at: new Date().toISOString()\n  })\n});\n\nconst result = await response.json();\n\nreturn $input.all();"
+      },
+      "id": "94e25301-ed17-479a-9d11-65e9d0926dec",
+      "name": "Mark Job Running",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1776,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Workflow Configuration').first().json.workerBaseUrl }}/transcribe",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer {{ $('Workflow Configuration').first().json.vyralWorkerSecret }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "file_url",
+              "value": "={{ $json.source_url }}"
+            },
+            {
+              "name": "job_id",
+              "value": "={{ $json.jobId }}"
+            },
+            {
+              "name": "webhook_url",
+              "value": "={{ $('Workflow Configuration').first().json.nextWebhookUrl }}/workers/transcribe"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "134419d5-5e0b-45e1-8a83-cf70cf15e6cd",
+      "name": "Call Transcribe Worker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1552,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"status\": \"processing\",\n  \"jobId\": \"{{ $json.jobId }}\",\n  \"message\": \"Transcription started\"\n}",
+        "options": {}
+      },
+      "id": "f28062b6-9cf2-47a2-bed5-b523d9c91f61",
+      "name": "Immediate Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -1328,
+        -96
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "workers/transcribe",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "transcribe-callback",
+      "name": "Transcribe Callback",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2224,
+        100
+      ],
+      "webhookId": "transcribe-callback-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobId = $input.first().json.job_id;\nconst status = $input.first().json.status;\nconst result = $input.first().json.result;\nconst supabaseUrl = $('Workflow Configuration').item.json.supabaseUrl;\nconst supabaseKey = $('Workflow Configuration').item.json.supabaseKey;\n\n// Update job status in Supabase\nconst response = await fetch(`${supabaseUrl}/rest/v1/jobs?id=eq.${jobId}`, {\n  method: 'PATCH',\n  headers: {\n    'apikey': supabaseKey,\n    'Authorization': `Bearer ${supabaseKey}`,\n    'Content-Type': 'application/json',\n    'Prefer': 'return=representation'\n  },\n  body: JSON.stringify({\n    status: status === 'completed' ? 'done' : 'failed',\n    output_payload: result,\n    error_message: status === 'failed' ? $input.first().json.error : null,\n    updated_at: new Date().toISOString()\n  })\n});\n\nconst updateResult = await response.json();\n\n// If transcription completed successfully, continue with next steps\nif (status === 'completed') {\n  return [{ json: { jobId, transcript: result.transcript, ...result } }];\n} else {\n  // Handle error\n  throw new Error($input.first().json.error || 'Transcription failed');\n}"
+      },
+      "id": "process-transcribe-result",
+      "name": "Process Transcribe Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2000,
+        100
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Mark Job Running",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Job Running": {
+      "main": [
+        [
+          {
+            "node": "Call Transcribe Worker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Transcribe Worker": {
+      "main": [
+        [
+          {
+            "node": "Immediate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe Callback": {
+      "main": [
+        [
+          {
+            "node": "Process Transcribe Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "callback-version-id",
+  "meta": {
+    "instanceId": "vyral-callback-workflow"
+  },
+  "id": "vyral-callback",
+  "tags": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "vyral-workers",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers for Vyral AI video processing platform",
+  "main": "vyral-worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:prod": "wrangler deploy --env production"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "ai",
+    "video-processing"
+  ],
+  "author": "Vyral",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

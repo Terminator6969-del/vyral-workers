@@ -1,0 +1,21 @@
+name = "vyral-workers"
+main = "vyral-worker.js"
+compatibility_date = "2023-10-01"
+
+[vars]
+VYRAL_WORKER_SECRET = "Mewtwo1995!"
+
+# Add secrets via `wrangler secret put` command:
+# wrangler secret put ASSEMBLYAI_KEY
+# wrangler secret put OPENROUTER_KEY
+# wrangler secret put SHOTSTACK_KEY
+# wrangler secret put OPENAI_ORG_ID
+
+[[routes]]
+pattern = "your-worker.your-subdomain.workers.dev/*"
+zone_name = "your-domain.com"
+
+# KV Namespace binding
+[[kv_namespaces]]
+binding = "VYRAL_CACHE"
+id = "f7e4b65d813a455986d1df906c6dd9f1"
